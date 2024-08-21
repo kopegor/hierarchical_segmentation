@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
+import numpy as np
 
 
 class PascalPartDataset(Dataset):
@@ -56,6 +57,10 @@ class PascalPartDataset(Dataset):
 
         # Load the mask
         mask = np.load(path_to_mask)
+        mask = torch.tensor(mask,
+                            # dtype=torch.float32
+                            ).long()
+        mask = mask.unsqueeze(0)
 
         # Load the image
         image = cv2.imread(path_to_img)
@@ -68,6 +73,11 @@ class PascalPartDataset(Dataset):
 
         # Apply transformation
         if self.transform:
-            image, mask = self.transform(image, mask)
+            # transformed = self.transform(image=image, mask=mask)
+            # image = transformed['image']
+            # mask = transformed['mask']
+            image = self.transform(image)
+            mask = self.transform(mask)
+
 
         return image, mask

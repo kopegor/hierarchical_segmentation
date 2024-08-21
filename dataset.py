@@ -57,27 +57,32 @@ class PascalPartDataset(Dataset):
 
         # Load the mask
         mask = np.load(path_to_mask)
-        mask = torch.tensor(mask,
-                            # dtype=torch.float32
-                            ).long()
-        mask = mask.unsqueeze(0)
+        # mask = torch.tensor(mask,
+        #                     # dtype=torch.float32
+        #                     ).long()
+        # mask = mask.unsqueeze(0)
 
         # Load the image
         image = cv2.imread(path_to_img)
         # Convert image to RGB tesnsor
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = torch.tensor(image, dtype=torch.float32)
+        # image = torch.tensor(image, dtype=torch.float32)
 
-        # Transpose image shape
-        image = image.permute(2, 0, 1)
+        # # Transpose image shape
+        # image = image.permute(2, 0, 1)
 
         # Apply transformation
         if self.transform:
-            # transformed = self.transform(image=image, mask=mask)
-            # image = transformed['image']
-            # mask = transformed['mask']
-            image = self.transform(image)
-            mask = self.transform(mask)
+            transformed = self.transform(image=image, mask=mask)
+            image = transformed['image']
+            mask = transformed['mask']
+            # image = self.transform(image)
+            # mask = self.transform(mask)
+
+            mask = mask.long()
+            mask = mask.unsqueeze(0)
+
+            # image = image.permute(2, 0, 1)
 
 
         return image, mask

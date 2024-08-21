@@ -3,8 +3,10 @@ import torch.nn as nn
 import pytorch_lightning as pl
 import segmentation_models_pytorch as smp
 from segmentation_models_pytorch.losses import JaccardLoss
+from torchmetrics.classification import MulticlassJaccardIndex
+from torch.optim import lr_scheduler
 
-import numpy as np
+# import numpy as np
 
 class PascalPartModel(pl.LightningModule):
     """
@@ -17,7 +19,7 @@ class PascalPartModel(pl.LightningModule):
     encoder_weights : str
         The pre-trained weights for the encoder (e.g., 'imagenet').
     """
-    def __init__(self, encoder_name='resnet34', encoder_weights='imagenet', num_classes=7):
+    def __init__(self, encoder_name='resnet34', encoder_weights='imagenet', num_classes=7, learning_rate=1e-3, transform=None):
         super(PascalPartModel, self).__init__()
         
         # Create a shared encoder using SMP (Segmentation Models PyTorch)
@@ -41,6 +43,10 @@ class PascalPartModel(pl.LightningModule):
         # self.bce_loss = nn.BCEWithLogitsLoss()
         self.cross_entropy_loss = nn.CrossEntropyLoss(ignore_index=0)
         self.jaccard_loss = JaccardLoss(mode='multiclass', from_logits=True)
+        # self.jaccard_loss = MulticlassJaccardIndex(num_classes=num_classes, ignore_index=0)
+
+        self.learning_rate = learning_rate
+        self.transform = transform
 
     def create_decoder(self, encoder, num_classes):
         """
@@ -206,10 +212,10 @@ class PascalPartModel(pl.LightningModule):
         jaccard_loss_lower_body = self.jaccard_loss(lower_body_output, masks)
         
         # Log losses
-        self.log('train_loss', total_loss, on_step=True)
-        self.log('train_jaccard_loss_mIoU^0', jaccard_loss_body, on_step=True)
-        self.log('train_jaccard_loss_mIoU^1', jaccard_loss_upper_lower, on_step=True)
-        self.log('train_jaccard_loss_mIoU^2', jaccard_loss_lower_body, on_step=True)
+        self.log('train_loss', total_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_jaccard_loss_mIoU_0', jaccard_loss_body,  prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_jaccard_loss_mIoU_1', jaccard_loss_upper_lower, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_jaccard_loss_mIoU_2', jaccard_loss_lower_body,  prog_bar=True, on_step=False, on_epoch=True)
         
         return total_loss
     
@@ -279,10 +285,10 @@ class PascalPartModel(pl.LightningModule):
         total_jaccard_loss = (jaccard_loss_body + jaccard_loss_upper_lower + jaccard_loss_lower_body) / 3
         
         # Log validation losses
-        self.log('val_loss', total_val_loss, on_step=True)
-        self.log('val_jaccard_loss_mIoU^0', jaccard_loss_body, on_step=True)
-        self.log('val_jaccard_loss_mIoU^1', jaccard_loss_upper_lower, on_step=True)
-        self.log('val_jaccard_loss_mIoU^2', jaccard_loss_lower_body, on_step=True)
+        self.log('val_loss', total_val_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('val_jaccard_loss_mIoU_0', jaccard_loss_body, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('val_jaccard_loss_mIoU_1', jaccard_loss_upper_lower, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('val_jaccard_loss_mIoU_2', jaccard_loss_lower_body, prog_bar=True, on_step=False, on_epoch=True)
         
         return total_val_loss # total_jaccard_loss 
     
@@ -295,5 +301,17 @@ class PascalPartModel(pl.LightningModule):
         torch.optim.Optimizer
             The Adam optimizer.
         """
-        return torch.optim.Adam(self.parameters(), lr=1e-3)
+        # return torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(
+            self.parameters(),
+            lr=self.learning_rate,
+        )
+
+        scheduler = lr_scheduler.StepLR(
+            optimizer,
+            step_size=5,
+            gamma=0.1,
+        )
+
+        return [optimizer], [scheduler]
 

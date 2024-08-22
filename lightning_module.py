@@ -31,19 +31,19 @@ class PascalPartModel(pl.LightningModule):
         )
         
         # First decoder: Body (body vs. background)
-        self.body_decoder = self.create_decoder(encoder=self.encoder, num_classes=2)  # For BCEWithLogitsLoss
+        self.body_decoder = self.create_decoder(encoder=self.encoder, num_classes=2)  
         
         # Second decoder: Upper body vs. Lower body (4 classes: 1, 2, 4, 6 for upper, 3, 5 for lower)
-        self.upper_lower_body_decoder = self.create_decoder(encoder=self.encoder, num_classes=2)  # For BCEWithLogitsLoss
+        self.upper_lower_body_decoder = self.create_decoder(encoder=self.encoder, num_classes=2)  
         
         # Third decoder: Specific body parts (6 classes: low_hand, up_hand, torso, head, low_leg, up_leg)
-        self.lower_body_decoder = self.create_decoder(encoder=self.encoder, num_classes=num_classes)  # For CrossEntropyLoss
+        self.body_parts_decoder = self.create_decoder(encoder=self.encoder, num_classes=num_classes) 
         
         # Loss functions
         # self.bce_loss = nn.BCEWithLogitsLoss()
         self.cross_entropy_loss = nn.CrossEntropyLoss(ignore_index=0)
-        self.jaccard_loss = JaccardLoss(mode='multiclass', from_logits=True)
-        # self.jaccard_loss = MulticlassJaccardIndex(num_classes=num_classes, ignore_index=0)
+        # self.jaccard_loss = JaccardLoss(mode='multiclass', from_logits=True)
+        self.jaccard_loss = MulticlassJaccardIndex(num_classes=num_classes, ignore_index=0)
 
         self.learning_rate = learning_rate
         self.transform = transform
@@ -92,14 +92,47 @@ class PascalPartModel(pl.LightningModule):
 
         # First level: predictions for body vs. background
         body_output = self.body_decoder(encoded_features[-1])
+
+        features_body_decoder = self.body_decoder[:2]
+        features_body_out = features_body_decoder(encoded_features[-1])
+        features_body_out = torch.argmax(features_body_out, dim=1).unsqueeze(1)
+
+        embedings_body = encoded_features[-1] + 10*features_body_out
+
+        # convert predicted body mask to 2d
+        # body_mask = torch.argmax(body_output, dim=1).unsqueeze(1)
+
+        # TODO add scip connections between decoder heads!!!
         
         # Second level: predictions for upper body vs. lower body
-        upper_lower_body_output = self.upper_lower_body_decoder(encoded_features[-1])
+        # upper_lower_body_output = self.upper_lower_body_decoder(encoded_features[-1])
+        upper_lower_body_output = self.upper_lower_body_decoder(embedings_body)
         
+        features_up_low_decoder = self.upper_lower_body_decoder[:2]
+        features_up_low_out = features_up_low_decoder(embedings_body)
+        features_up_low_out = torch.argmax(features_up_low_out, dim=1).unsqueeze(1)
+
+        embedings_up_low = embedings_body + 10*features_up_low_out
+
         # Third level: predictions for specific body parts
-        lower_body_output = self.lower_body_decoder(encoded_features[-1])
-        
-        return body_output, upper_lower_body_output, lower_body_output
+        # body_parts_output = self.body_parts_decoder(encoded_features[-1])
+        body_parts_output = self.body_parts_decoder(embedings_up_low)
+
+        # print(encoded_features[-1].shape)
+        # # print(tmp_body_out.shape)
+        # # print(tmp_body_out2.shape)
+        # print(tmp_body_dec_out.shape)
+        # # print(torch.argmax(tmp_body_dec_out, dim=1).shape)
+        # print()
+
+        # print(body_output.shape)
+
+        # print(self.body_decoder[0])
+        # print(self.upper_lower_body_decoder)
+
+        # print(encoded_features[-10000000000000000000000])
+
+        return body_output, upper_lower_body_output, body_parts_output
     
     def _get_body_mask(self, masks):
         """
@@ -132,9 +165,9 @@ class PascalPartModel(pl.LightningModule):
         torch.Tensor
             A binary mask containing 1 for upper body and 0 for lower body.
         """
-        upper_body_mask = torch.zeros_like(masks).long()  
-        upper_body_mask[(masks == 1) | (masks == 2) | (masks == 4) | (masks == 6)] = 1
-        return upper_body_mask
+        upper_lower_body_mask = torch.zeros_like(masks).long()  
+        upper_lower_body_mask[(masks == 1) | (masks == 2) | (masks == 4) | (masks == 6)] = 1
+        return upper_lower_body_mask
 
 
     # def _convert_body_parts_mask(self, masks):
@@ -171,26 +204,16 @@ class PascalPartModel(pl.LightningModule):
             The total loss for the current training step.
         """
         images, masks = batch
-        body_output, upper_lower_body_output, lower_body_output = self(images)
+        body_output, upper_lower_body_output, body_parts_output = self(images)
         
         # Extract body vs. background mask
         body_mask = self._get_body_mask(masks)
         
         # Extract upper vs. lower body mask
-        upper_body_mask = self._get_upper_lower_body_mask(masks)
+        upper_lower_body_mask = self._get_upper_lower_body_mask(masks)
         
         # Convert masks for body parts
         # body_parts_mask = self._convert_body_parts_mask(lower_body_output)
-
-        # print(body_output.shape)
-        # print(upper_lower_body_output.shape)
-        # print(lower_body_output.shape)
-        # print(body_parts_mask.shape)
-
-        # print(body_mask.shape)
-        # print(upper_body_mask.shape)
-        # print(masks.shape)
-        
 
         # Calculate loss for body vs. background (mIoU^0)
         # loss_body = self.bce_loss(body_output, body_mask)
@@ -198,26 +221,30 @@ class PascalPartModel(pl.LightningModule):
         
         # Calculate loss for upper vs. lower body within the body mask (mIoU^1)
         # loss_upper_lower_body = self.bce_loss(upper_lower_body_output, upper_body_mask)
-        loss_upper_lower_body = self.cross_entropy_loss(upper_lower_body_output, upper_body_mask.squeeze(1))
+        loss_upper_lower_body = self.cross_entropy_loss(upper_lower_body_output, upper_lower_body_mask.squeeze(1))
         
         # Calculate loss for specific body parts within the relevant masks (mIoU^2)
-        loss_lower_body = self.cross_entropy_loss(lower_body_output, masks.squeeze(1))  # Adjust the mask for the lower body
+        loss_body_parts = self.cross_entropy_loss(body_parts_output, masks.squeeze(1))  # Adjust the mask for the lower body
 
         # Combine the losses
-        total_loss = (loss_body + loss_upper_lower_body + loss_lower_body) / 3
+        total_loss = (loss_body + loss_upper_lower_body + loss_body_parts) / 3
         
         # Calculate the Jaccard loss (IoU)
-        jaccard_loss_body = self.jaccard_loss(body_output, body_mask)
-        jaccard_loss_upper_lower = self.jaccard_loss(upper_lower_body_output, upper_body_mask)
-        jaccard_loss_lower_body = self.jaccard_loss(lower_body_output, masks)
+        jaccard_loss_body = self.jaccard_loss(torch.argmax(body_output, dim=1).unsqueeze(1), body_mask)
+        jaccard_loss_upper_lower = self.jaccard_loss(torch.argmax(upper_lower_body_output, dim=1).unsqueeze(1), upper_lower_body_mask)
+        jaccard_loss_body_parts = self.jaccard_loss(torch.argmax(body_parts_output, dim=1).unsqueeze(1), masks)
         
+        total_jaccard_loss = 0.25*jaccard_loss_body + 0.25*jaccard_loss_upper_lower + 0.5*jaccard_loss_body_parts
+        total_jaccard_loss.requires_grad = True
+
         # Log losses
         self.log('train_loss', total_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_total_jaccard_loss', total_jaccard_loss, prog_bar=True, on_step=False, on_epoch=True)
         self.log('train_jaccard_loss_mIoU_0', jaccard_loss_body,  prog_bar=True, on_step=False, on_epoch=True)
         self.log('train_jaccard_loss_mIoU_1', jaccard_loss_upper_lower, prog_bar=True, on_step=False, on_epoch=True)
-        self.log('train_jaccard_loss_mIoU_2', jaccard_loss_lower_body,  prog_bar=True, on_step=False, on_epoch=True)
+        self.log('train_jaccard_loss_mIoU_2', jaccard_loss_body_parts,  prog_bar=True, on_step=False, on_epoch=True)
         
-        return total_loss
+        return total_loss # total_jaccard_loss
     
     def validation_step(self, batch, batch_idx):
         """
@@ -236,32 +263,16 @@ class PascalPartModel(pl.LightningModule):
             The total validation loss for the current step.
         """
         images, masks = batch
-        body_output, upper_lower_body_output, lower_body_output = self(images)
+        body_output, upper_lower_body_output, body_parts_output = self(images)
         
         # Extract body vs. background mask
         body_mask = self._get_body_mask(masks)
         
         # Extract upper vs. lower body mask
-        upper_body_mask = self._get_upper_lower_body_mask(masks)
+        upper_lower_body_mask = self._get_upper_lower_body_mask(masks)
 
         # Convert masks for body parts
         # body_parts_out = self._convert_body_parts_mask(lower_body_output)
-        
-        # print(body_output.shape)
-        # print(upper_lower_body_output.shape)
-        # print(lower_body_output.shape)
-        # print(body_parts_out.shape)
-
-        # print(body_mask.shape)
-        # print(upper_body_mask.shape)
-        # print(masks.shape)
-        # print(body_mask.squeeze(1).shape)
-
-        # print(lower_body_output.dtype)
-        # print(masks.dtype)
-
-        # print(body_output.dtype)
-        # print(body_mask.dtype)
         
         # Calculate validation loss for body vs. background (mIoU^0)
         # val_loss_body = self.bce_loss(body_output, body_mask)
@@ -269,28 +280,32 @@ class PascalPartModel(pl.LightningModule):
         
         # # Calculate validation loss for upper vs. lower body (mIoU^1)
         # val_loss_upper_lower_body = self.bce_loss(upper_lower_body_output, upper_body_mask)
-        val_loss_upper_lower_body = self.cross_entropy_loss(upper_lower_body_output, upper_body_mask.squeeze(1))
+        val_loss_upper_lower_body = self.cross_entropy_loss(upper_lower_body_output, upper_lower_body_mask.squeeze(1))
         
         # # Calculate validation loss for specific body parts (mIoU^2)
-        val_loss_lower_body = self.cross_entropy_loss(lower_body_output, masks.squeeze(1))  # Adjust the mask for the lower body
+        val_loss_body_parts = self.cross_entropy_loss(body_parts_output, masks.squeeze(1))  # Adjust the mask for the lower body
         # # val_loss_lower_body = self.cross_entropy_loss(body_parts_out, masks - 1)    
 
-        total_val_loss = (val_loss_body + val_loss_upper_lower_body + val_loss_lower_body) / 3
-        
-        # Calculate the Jaccard loss (IoU)
-        jaccard_loss_body = self.jaccard_loss(body_output, body_mask)
-        jaccard_loss_upper_lower = self.jaccard_loss(upper_lower_body_output, upper_body_mask)
-        jaccard_loss_lower_body = self.jaccard_loss(lower_body_output, masks)
+        total_val_loss = (val_loss_body + val_loss_upper_lower_body + val_loss_body_parts) / 3
 
-        total_jaccard_loss = (jaccard_loss_body + jaccard_loss_upper_lower + jaccard_loss_lower_body) / 3
+        # Calculate the Jaccard loss (IoU)
+        jaccard_loss_body = self.jaccard_loss(torch.argmax(body_output, dim=1).unsqueeze(1), body_mask)
+        jaccard_loss_upper_lower = self.jaccard_loss(torch.argmax(upper_lower_body_output, dim=1).unsqueeze(1), upper_lower_body_mask)
+        jaccard_loss_body_parts = self.jaccard_loss(torch.argmax(body_parts_output, dim=1).unsqueeze(1), masks)
+
+        total_jaccard_loss = 0.25*jaccard_loss_body + 0.25*jaccard_loss_upper_lower + 0.5*jaccard_loss_body_parts
+        total_jaccard_loss.requires_grad = True
         
+        # TODO add logging total jaccard loss !!!
+
         # Log validation losses
         self.log('val_loss', total_val_loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('val_total_jaccard_loss', total_jaccard_loss, prog_bar=True, on_step=False, on_epoch=True)
         self.log('val_jaccard_loss_mIoU_0', jaccard_loss_body, prog_bar=True, on_step=False, on_epoch=True)
         self.log('val_jaccard_loss_mIoU_1', jaccard_loss_upper_lower, prog_bar=True, on_step=False, on_epoch=True)
-        self.log('val_jaccard_loss_mIoU_2', jaccard_loss_lower_body, prog_bar=True, on_step=False, on_epoch=True)
+        self.log('val_jaccard_loss_mIoU_2', jaccard_loss_body_parts, prog_bar=True, on_step=False, on_epoch=True)
         
-        return total_val_loss # total_jaccard_loss 
+        return total_jaccard_loss # total_val_loss  
     
     def configure_optimizers(self):
         """

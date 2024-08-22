@@ -57,7 +57,7 @@ def train():
     train_dataset = PascalPartDataset(df_train_paths, transform=transform)
     val_dataset = PascalPartDataset(df_val_paths, transform=transform)
 
-    batch_size = 32
+    batch_size = 64
     # create dataloaders
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=63)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=63)
@@ -66,7 +66,7 @@ def train():
     pl_model = PascalPartModel(
         encoder_name='resnet34',
         encoder_weights='imagenet', 
-        learning_rate=1e-3, 
+        learning_rate=5e-4, 
         transform=transform, 
         num_classes=7
     )
@@ -78,12 +78,13 @@ def train():
 
 
     trainer = pl.Trainer(
-        max_epochs=20,
+        max_epochs=25,
         accelerator='gpu',
         devices=1    
     )
 
     #  mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./lightning_logs --host 0.0.0.0 --port 3033
+    
     # specify server port
     port = '3033'
 

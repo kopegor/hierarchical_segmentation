@@ -66,9 +66,9 @@ def train():
     pl_model = PascalPartModel(
         encoder_name='resnet34',
         encoder_weights='imagenet', 
-        learning_rate=5e-4, 
+        learning_rate=1e-3, 
         transform=transform, 
-        num_classes=7
+        num_classes=2
     )
     
     callbacks = [

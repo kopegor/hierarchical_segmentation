@@ -2,18 +2,20 @@ import pytorch_lightning as pl
 import pandas as pd
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-from dataset import PascalPartDataset
-from lightning_module import PascalPartModel
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from torchvision import transforms
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
 
+from dataset import PascalPartDataset
+# from lightning_module import PascalPartModel
+from pose_estimation_sam_module import PascalPartModel
+
 import mlflow
 import time
 
 # set random seeds
-seed = 42
+seed = 142
 pl.seed_everything(seed=seed, workers=True)
 
 
@@ -57,7 +59,7 @@ def train():
     train_dataset = PascalPartDataset(df_train_paths, transform=transform)
     val_dataset = PascalPartDataset(df_val_paths, transform=transform)
 
-    batch_size = 64
+    batch_size = 16
     # create dataloaders
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=63)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=63)
@@ -68,14 +70,13 @@ def train():
         encoder_weights='imagenet', 
         learning_rate=1e-3, 
         transform=transform, 
-        num_classes=2
+        num_classes=7
     )
     
     callbacks = [
-        EarlyStopping(monitor='val_loss'),
+        EarlyStopping(monitor='val_loss', patience=3, min_delta=1e-4),
         LearningRateMonitor(logging_interval='epoch'),
     ]
-
 
     trainer = pl.Trainer(
         max_epochs=25,

@@ -10,6 +10,7 @@ from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
 from dataset import PascalPartDataset
 # from lightning_module import PascalPartModel
 from pose_estimation_sam_module import PascalPartModel
+# from old_pose_estimation_sam_modeule import PascalPartModel
 
 import mlflow
 import time
@@ -59,7 +60,7 @@ def train():
     train_dataset = PascalPartDataset(df_train_paths, transform=transform)
     val_dataset = PascalPartDataset(df_val_paths, transform=transform)
 
-    batch_size = 24
+    batch_size = 16
     # create dataloaders
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=63)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=63)
@@ -70,7 +71,7 @@ def train():
         encoder_weights='imagenet', 
         learning_rate=1e-3, 
         transform=transform, 
-        num_classes=7
+        # num_classes=7
     )
     
     callbacks = [
@@ -79,7 +80,7 @@ def train():
     ]
 
     trainer = pl.Trainer(
-        max_epochs=25,
+        max_epochs=20,
         accelerator='gpu',
         devices=1    
     )

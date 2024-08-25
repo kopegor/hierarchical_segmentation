@@ -24,10 +24,13 @@ class PascalPartModel(pl.LightningModule):
         # Loss functions
         # self.bce_loss = nn.BCEWithLogitsLoss()
         self.cross_entropy_loss = nn.CrossEntropyLoss(
-            ignore_index=0
+            # ignore_index=0
             )
         self.jaccard_loss = JaccardLoss(mode='multiclass', from_logits=True)
-        self.jaccard_index_body = MulticlassJaccardIndex(num_classes=2, ignore_index=0)
+        self.jaccard_index_body = MulticlassJaccardIndex(
+            num_classes=2, 
+            # ignore_index=0
+        )
         self.jaccard_index_up_low = MulticlassJaccardIndex(num_classes=3, ignore_index=0)
         self.jaccard_index_parts = MulticlassJaccardIndex(num_classes=7, ignore_index=0)
         # self.jaccard_index = MeanIoU()
@@ -35,42 +38,31 @@ class PascalPartModel(pl.LightningModule):
         self.transform = transform
 
         # Create a shared encoder using SMP (Segmentation Models PyTorch)
-        # self.model = smp.DeepLabV3(
+        # self.model = smp.MAnet(
         #     encoder_name=encoder_name,        
         #     encoder_weights=encoder_weights,  
         #     classes=2,                     
         #     activation=None                   
         # )
-        self.model_body = smp.MAnet(  
+        self.model = smp.DeepLabV3(  
             encoder_name=encoder_name,        
             encoder_weights=encoder_weights,  
             classes=2,                    
             activation=None                   
         )
 
-        self.model_up_low = smp.MAnet(  
-            encoder_name=encoder_name,        
-            encoder_weights=encoder_weights,  
-            classes=3,                    
-            activation=None                   
-        )
-
-        self.model_parts = smp.MAnet(  
-            encoder_name=encoder_name,        
-            encoder_weights=encoder_weights,  
-            classes=7,                    
-            activation=None                   
-        )
-
+        # Freeze encoder weights
+        self.freeze_encoder()
 
         # Fusion Module: Combine image features and mask features
+        # self.fusion_conv1d = nn.Conv2d(in_channels=4, out_channels=3, kernel_size=3, padding=1)
         self.body_conv1d = nn.Conv2d(in_channels=4, out_channels=3, kernel_size=3, padding=1)
-        self.up_low_conv1d = nn.Conv2d(in_channels=6, out_channels=3, kernel_size=3, padding=1)
-        self.parts_conv1d = nn.Conv2d(in_channels=9, out_channels=3, kernel_size=3, padding=1)
+        # self.up_low_conv1d = nn.Conv2d(in_channels=6, out_channels=3, kernel_size=3, padding=1)
+        # self.parts_conv1d = nn.Conv2d(in_channels=9, out_channels=3, kernel_size=3, padding=1)
 
-        # self.decoder_body = self.create_decoder(self.model, num_classes=2)
-        # self.decoder_up_low = self.create_decoder(self.model, num_classes=3)
-        # self.decoder_parts = self.create_decoder(self.model, num_classes=7)
+        self.decoder_body = self.create_decoder(self.model, num_classes=2)
+        self.decoder_up_low = self.create_decoder(self.model, num_classes=3)
+        self.decoder_parts = self.create_decoder(self.model, num_classes=7)
 
 
     def create_decoder(self, model, num_classes):
@@ -83,6 +75,13 @@ class PascalPartModel(pl.LightningModule):
             nn.UpsamplingBilinear2d(scale_factor=8.0)
         )
 
+    def freeze_encoder(self):
+        for param in self.model.encoder.parameters():
+            param.requires_grad = False
+    
+    def unfreeze_encoder(self):
+        for param in self.model.encoder.parameters():
+            param.requires_grad = True
 
 
     def get_single_features_mask(self, img):
@@ -92,7 +91,7 @@ class PascalPartModel(pl.LightningModule):
         x = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
         
         # Load a model for pose estimation
-        model_pose = YOLO("yolov8x-pose.pt") 
+        model_pose = YOLO("yolov8s-pose.pt") 
 
         # run pose estimation model
         res_pose = model_pose.predict(
@@ -129,7 +128,7 @@ class PascalPartModel(pl.LightningModule):
             bboxes.append(tmp_bboxes)
 
         # Create a FastSAM model
-        model_sam = FastSAM("FastSAM-x.pt")  # "FastSAM-x.pt"
+        model_sam = FastSAM("FastSAM-s.pt")  # "FastSAM-x.pt"
 
         # x = x.astype(np.uint8)
         res_seg = None
@@ -148,41 +147,43 @@ class PascalPartModel(pl.LightningModule):
                 labels=labels[0], 
                 bboxes=bboxes[0],
                 # conf=0.01,
-                texts='human, body parts'
+                # texts='human, body parts'
                 # texts= 'humans. for each human. upper body. lower body. low hand, up hand, torso, head, low leg, up leg'
             )
             
             # res_seg.append(tmp_res)
 
         except Exception as err:
-            print('try without text promt')
-            print(err)
-            try:
-                res_seg = model_sam.predict(
-                    source=x,
-                    # device='gpu',
-                    half=True,
-                    verbose=False,
-                    iou=0.99,
-                    # imgsz=640,
-                    imgsz=256,
-                    points=points[0], 
-                    labels=labels[0], 
-                    bboxes=bboxes[0],
-                    # conf=0.01,
-                    # texts='human, body parts'
-                    # texts= 'humans. for each human. upper body. lower body. low hand, up hand, torso, head, low leg, up leg'
-                )
+            # print('try without text promt')
+            # print(err)
+            # try:
+            #     res_seg = model_sam.predict(
+            #         source=x,
+            #         # device='gpu',
+            #         half=True,
+            #         verbose=False,
+            #         iou=0.99,
+            #         # imgsz=640,
+            #         imgsz=256,
+            #         points=points[0], 
+            #         labels=labels[0], 
+            #         bboxes=bboxes[0],
+            #         # conf=0.01,
+            #         # texts='human, body parts'
+            #         # texts= 'humans. for each human. upper body. lower body. low hand, up hand, torso, head, low leg, up leg'
+            #     )
 
-                # res_seg.append(tmp_res)
+            #     # res_seg.append(tmp_res)
             
-            except Exception as err: 
-                
-                final_mask = torch.zeros( 1, 256, 256).to(device)
-                print(err)
-                print('added zeros feature map')
+            # except Exception as err: 
+            
+            final_mask = torch.zeros(256, 256).to(device)
+            print(err)
+            print('added zeros feature map')
 
-                return final_mask
+                # print(f'zeros final mask shape: {final_mask.shape}')
+
+            return final_mask
 
 
         # convert to final mask
@@ -192,7 +193,7 @@ class PascalPartModel(pl.LightningModule):
         final_mask = torch.tensor(final_mask)
 
         final_mask = torch.tensor(final_mask).to(device)
-        print(final_mask.shape)
+        # print(f'normal final mask shape: {final_mask.shape}')
 
         return final_mask
 
@@ -237,16 +238,82 @@ class PascalPartModel(pl.LightningModule):
         
         return up_low_pred
 
+    def freeze_pipeline(self):
+        if self.current_epoch <= 1:
+            for param in self.decoder_parts.parameters():
+                param.requires_grad = False
+
+        elif self.current_epoch <= 3:
+            for param in self.decoder_body.parameters():
+                param.requires_grad = False
+
+            for param in self.decoder_up_low.parameters():
+                param.requires_grad = False
+
+            for param in self.decoder_parts.parameters():
+                param.requires_grad = True
+
+
+        elif self.current_epoch <= 6:
+            for param in self.decoder_body.parameters():
+                param.requires_grad = True
+
+            for param in self.decoder_up_low.parameters():
+                param.requires_grad = True
+
+            for param in self.decoder_parts.parameters():
+                param.requires_grad = True
+
+        
+        else:
+            for param in self.decoder_body.parameters():
+                param.requires_grad = False
+
+            for param in self.decoder_up_low.parameters():
+                param.requires_grad = False
+
+            for param in self.decoder_parts.parameters():
+                param.requires_grad = True
+
+
 
     def forward(self, x):
         device = 'cuda' if x.get_device() >= 0 else 'cpu'
         # extract features using pose estimation and SAM
         # sam_features = self.get_features_mask(x)
 
+
+        # sam_features = [self.get_single_features_mask(x_idx).cpu().tolist() for x_idx in x]
+
+        # sam_features = torch.tensor(sam_features, dtype=torch.float32).to(device).unsqueeze(1)
+
+        # # concat image and extracted features from SAM     
+        # x_for_body = torch.cat([x, sam_features], dim=1)
+        # # x = x + sam_features
+
+        # x_for_body = self.body_conv1d(x_for_body)
+
+        # # Pass the input through the encoder for body segmentation
+        # output_body = self.model_body(x_for_body)
+        # # output_body = self.decoder_body(x_for_body)
+
+        # x_for_up_low = torch.cat([x, sam_features, output_body], dim=1)
+        # x_for_up_low = self.up_low_conv1d(x_for_up_low)
+
+        # # output_up_low = self.model_up_low(x_for_up_low)
+        # output_up_low = self.model_body.encoder(x_for_up_low)[-1]
+        # output_up_low = self.decoder_up_low(output_up_low)
+
+        # x_for_parts = torch.cat([x, sam_features, output_body, output_up_low], dim=1)
+        # x_for_parts = self.parts_conv1d(x_for_parts)
+
+        # # output_parts = self.model_parts(x_for_parts)
+        # output_parts = self.model_body.encoder(x_for_parts)[-1]
+        # output_parts = self.decoder_parts(output_parts)
+
         sam_features = [self.get_single_features_mask(x_idx).cpu().tolist() for x_idx in x]
+
         sam_features = torch.tensor(sam_features, dtype=torch.float32).to(device).unsqueeze(1)
-        print(sam_features.shape)
-        
 
         # concat image and extracted features from SAM     
         x_for_body = torch.cat([x, sam_features], dim=1)
@@ -255,26 +322,51 @@ class PascalPartModel(pl.LightningModule):
         x_for_body = self.body_conv1d(x_for_body)
 
         # Pass the input through the encoder for body segmentation
-        output_body = self.model_body(x_for_body)
+        output_features_body = self.model.encoder(x_for_body)[-1]
+        output_body = self.decoder_body(output_features_body)
         # output_body = self.decoder_body(x_for_body)
 
-        x_for_up_low = torch.cat([x, sam_features, output_body], dim=1)
-        x_for_up_low = self.up_low_conv1d(x_for_up_low)
+        # x_for_up_low = torch.cat([x, sam_features, output_body], dim=1)
+        # x_for_up_low = self.up_low_conv1d(x_for_up_low)
 
-        output_up_low = self.model_up_low(x_for_up_low)
+        # output_up_low = self.model_up_low(x_for_up_low)
+        # output_up_low = self.model.encoder(x_for_up_low)[-1]
+        # output_up_low = self.decoder_up_low(output_up_low)
+        output_up_low = self.decoder_up_low(output_features_body)
 
-        x_for_parts = torch.cat([x, sam_features, output_body, output_up_low], dim=1)
-        x_for_parts = self.parts_conv1d(x_for_parts)
+        # x_for_parts = torch.cat([x, sam_features, output_body, output_up_low], dim=1)
+        # x_for_parts = self.parts_conv1d(x_for_parts)
 
-        output_parts = self.model_parts(x_for_parts)
+        # output_parts = self.model_parts(x_for_parts)
+        # output_parts = self.model.encoder(x_for_parts)[-1]
+        # output_parts = self.decoder_parts(output_parts)
+        output_parts = self.decoder_parts(output_features_body)
 
         return output_body, output_up_low, output_parts
+
+    def on_train_epoch_start(self):
+        # freeze/unfreeze specific layers for more optimizing training
+        self.freeze_pipeline()
+
+        for name, param in self.named_parameters():
+            print(name, param.requires_grad)
+
+
+    def on_validation_epoch_start(self):
+        # freeze/unfreeze specific layers for more optimizing training
+        self.freeze_pipeline()
+
+        for name, param in self.named_parameters():
+            print(name, param.requires_grad)
 
 
     def training_step(self, batch, batch_idx):
         """
         Defines the training step for the model.
         """
+        
+        # freeze/unfreeze specific layers for more optimizing training
+        # self.freeze_pipeline()
 
         images, masks = batch
         out_body, out_up_low, out_parts = self(images)
@@ -312,12 +404,24 @@ class PascalPartModel(pl.LightningModule):
         self.log('train_jaccard_index_mIoU_1', jaccard_index_up_low, prog_bar=True, on_step=True, on_epoch=True)
         self.log('train_jaccard_index_mIoU_2', jaccard_index_parts, prog_bar=True, on_step=True, on_epoch=True)
 
-        return total_loss
+        # return different losses according to freeze pipeline
+        if self.current_epoch <= 1:
+            return loss_body + loss_up_low
+
+        elif self.current_epoch <= 3:
+            return loss_parts
+        
+        elif self.current_epoch <= 6:
+            return total_loss
+        
+        else:
+            return loss_parts
 
     def validation_step(self, batch, batch_idx):
         """
         Defines the validation step for the model.
         """
+        # self.freeze_pipeline()
 
         images, masks = batch
         out_body, out_up_low, out_parts = self(images)
@@ -356,7 +460,19 @@ class PascalPartModel(pl.LightningModule):
         self.log('val_jaccard_index_mIoU_1', jaccard_index_up_low, prog_bar=True, on_step=False, on_epoch=True)
         self.log('val_jaccard_index_mIoU_2', jaccard_index_parts, prog_bar=True, on_step=False, on_epoch=True)
 
-        return total_loss
+
+        # return different losses according to freeze pipeline
+        if self.current_epoch <= 1:
+            return loss_body + loss_up_low
+
+        elif self.current_epoch <= 3:
+            return loss_parts
+        
+        elif self.current_epoch <= 6:
+            return total_loss
+        
+        else:
+            return loss_parts
 
 
     def configure_optimizers(self):
@@ -376,8 +492,7 @@ class PascalPartModel(pl.LightningModule):
         # )
         scheduler = lr_scheduler.CosineAnnealingLR(
             optimizer,
-            step_size=5,
-            gamma=0.3,
+            T_max=50,
         )
 
         return [optimizer], [scheduler]

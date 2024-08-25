@@ -42,13 +42,13 @@ def train():
     df_val_paths['PATH_TO_MASK'] = [f'{path_to_raw}/Pascal-part/gt_masks/{id_mask}.npy' for id_mask in splits_samples['val_id']]
 
     # # upload augmented samples 
-    df_augment_paths = pd.DataFrame({'PATH_TO_IMAGE': [], 'PATH_TO_MASK': []})
-    df_augment_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/augmented_train_samples/JPEGImages/{id_img}.jpg' for id_img in splits_samples['train_id']]
-    df_augment_paths['PATH_TO_MASK'] = [f'{path_to_raw}/augmented_train_samples/gt_masks/{id_mask}.npy' for id_mask in splits_samples['train_id']]
+    # df_augment_paths = pd.DataFrame({'PATH_TO_IMAGE': [], 'PATH_TO_MASK': []})
+    # df_augment_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/augmented_train_samples/JPEGImages/{id_img}.jpg' for id_img in splits_samples['train_id']]
+    # df_augment_paths['PATH_TO_MASK'] = [f'{path_to_raw}/augmented_train_samples/gt_masks/{id_mask}.npy' for id_mask in splits_samples['train_id']]
 
-    # add augmented paths to dataset
+    # # add augmented paths to dataset
 
-    df_train_paths = pd.concat([df_train_paths, df_augment_paths])
+    # df_train_paths = pd.concat([df_train_paths, df_augment_paths])
 
 
     # specify transforms 
@@ -70,7 +70,7 @@ def train():
     train_dataset = PascalPartDataset(df_train_paths, transform=transform)
     val_dataset = PascalPartDataset(df_val_paths, transform=transform)
 
-    batch_size = 2
+    batch_size = 12
     # create dataloaders
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=63)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=63)
@@ -90,7 +90,7 @@ def train():
     ]
 
     trainer = pl.Trainer(
-        max_epochs=13,
+        max_epochs=23,
         accelerator='gpu',
         devices=1    
     )

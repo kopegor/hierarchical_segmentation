@@ -23,12 +23,18 @@ class PascalPartModel(pl.LightningModule):
         super(PascalPartModel, self).__init__()
         
         # Create a shared encoder using SMP (Segmentation Models PyTorch)
-        self.encoder = smp.DeepLabV3(
-            encoder_name=encoder_name,        # The name of the encoder
-            encoder_weights=encoder_weights,  # Pre-trained weights for the encoder
-            classes=num_classes,                     # Output classes (not needed for custom decoders)
-            activation=None                   # No activation function (to be applied later)
+        self.encoder = smp.DeepLabV3(  
+            encoder_name=encoder_name,        
+            encoder_weights=encoder_weights,  
+            classes=num_classes,                    
+            activation=None                   
         )
+        # self.encoder = smp.MAnet(  
+        #     encoder_name=encoder_name,        
+        #     encoder_weights=encoder_weights,  
+        #     classes=num_classes,                    
+        #     activation=None                   
+        # )
         
         # # First decoder: Body (body vs. background)
         self.body_decoder = self.create_decoder(encoder=self.encoder, num_classes=2)  

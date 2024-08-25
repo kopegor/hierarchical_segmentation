@@ -23,34 +23,40 @@ class PascalPartModel(pl.LightningModule):
         # self.bce_loss = nn.BCEWithLogitsLoss()
         self.cross_entropy_loss = nn.CrossEntropyLoss()
         self.jaccard_loss = JaccardLoss(mode='multiclass', from_logits=True)
-        self.jaccard_index = MulticlassJaccardIndex(num_classes=num_classes, ignore_index=0)
+        self.jaccard_index = MulticlassJaccardIndex(num_classes=num_classes)
 
         self.learning_rate = learning_rate
         self.transform = transform
 
         # Create a shared encoder using SMP (Segmentation Models PyTorch)
-        self.encoder = smp.DeepLabV3(
+        # self.encoder = smp.DeepLabV3(
+        #     encoder_name=encoder_name,        
+        #     encoder_weights=encoder_weights,  
+        #     classes=num_classes,                     
+        #     activation=None                   
+        # )
+        self.encoder = smp.MAnet(
             encoder_name=encoder_name,        
             encoder_weights=encoder_weights,  
-            classes=num_classes,                     
+            classes=2,                     
             activation=None                   
         )
 
         # Fusion Module: Combine image features and mask features
         self.fusion_conv1d = nn.Conv2d(in_channels=4, out_channels=3, kernel_size=3, padding=1)
 
-        self.decoder = self.create_decoder(self.encoder, num_classes)
+    #     self.decoder = self.create_decoder(self.encoder, num_classes)
 
 
-    def create_decoder(self, encoder, num_classes):
-        """
-        Creates a decoder using the same architecture as the main encoder.
-        """
-        return nn.Sequential(
-            encoder.decoder,
-            nn.Conv2d(self.encoder.decoder.out_channels, num_classes, kernel_size=1),
-            nn.UpsamplingBilinear2d(scale_factor=8.0)
-        )
+    # def create_decoder(self, encoder, num_classes):
+    #     """
+    #     Creates a decoder using the same architecture as the main encoder.
+    #     """
+    #     return nn.Sequential(
+    #         encoder.decoder,
+    #         nn.Conv2d(self.encoder.decoder.out_channels, num_classes, kernel_size=1),
+    #         nn.UpsamplingBilinear2d(scale_factor=8.0)
+    #     )
 
 
     def get_features_mask(self, x):
@@ -256,19 +262,21 @@ class PascalPartModel(pl.LightningModule):
         images, masks = batch
         body_out = self(images)
 
+        pred_body_out = torch.argmax(body_out, dim=1).unsqueeze(1).long()
+
         true_body_masks = self._get_body_mask(masks)
 
         # Calculate loss for specific body parts within the relevant masks (mIoU^2)
         loss = self.cross_entropy_loss(body_out, true_body_masks.squeeze(1))
 
         jaccard_loss = self.jaccard_loss(body_out, true_body_masks.squeeze(1))
-        jaccard_index = self.jaccard_index(body_out, true_body_masks.squeeze(1))
+        jaccard_index = self.jaccard_index(pred_body_out, true_body_masks)
 
         self.log('train_loss', loss,  prog_bar=True, on_step=True, on_epoch=True)
         self.log('train_jaccard_loss_mIoU_0', jaccard_loss, prog_bar=True, on_step=True, on_epoch=True)
         self.log('train_jaccard_index_mIoU_0', jaccard_index, prog_bar=True, on_step=True, on_epoch=True)
 
-        return loss
+        return jaccard_loss # loss
 
     def validation_step(self, batch, batch_idx):
         """
@@ -278,19 +286,23 @@ class PascalPartModel(pl.LightningModule):
         images, masks = batch
         body_out = self(images)
 
+        pred_body_out = torch.argmax(body_out, dim=1).unsqueeze(1).long()
+
         true_body_masks = self._get_body_mask(masks)
 
+        # print(pred_body_out.shape, true_body_masks.shape)
+        # print(true_body_masks.squeeze(1).shape)
         # Calculate loss for specific body parts within the relevant masks (mIoU^2)
         loss = self.cross_entropy_loss(body_out, true_body_masks.squeeze(1))
 
         jaccard_loss = self.jaccard_loss(body_out, true_body_masks.squeeze(1))
-        jaccard_index = self.jaccard_index(body_out, true_body_masks.squeeze(1))
+        jaccard_index = self.jaccard_index(pred_body_out, true_body_masks)
 
         self.log('val_loss', loss,  prog_bar=True, on_step=True, on_epoch=True)
         self.log('val_jaccard_loss_mIoU_0', jaccard_loss, prog_bar=True, on_step=True, on_epoch=True)
         self.log('val_jaccard_index_mIoU_0', jaccard_index, prog_bar=True, on_step=True, on_epoch=True)
 
-        return loss
+        return jaccard_loss # loss
 
     def configure_optimizers(self):
         """

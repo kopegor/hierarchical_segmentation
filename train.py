@@ -33,13 +33,23 @@ def train():
         with open(f'/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/hierarchical_segmentation/data/{split}.txt') as f:
             splits_samples[split] = f.read().splitlines()
 
-    path_to_raw = '/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/Pascal-part/Pascal-part'
+    path_to_raw = '/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/Pascal-part'
 
     # create dataframes with full paths to images and masks
-    df_train_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/JPEGImages/{id_img}.jpg' for id_img in splits_samples['train_id']]
-    df_train_paths['PATH_TO_MASK'] = [f'{path_to_raw}/gt_masks/{id_mask}.npy' for id_mask in splits_samples['train_id']]
-    df_val_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/JPEGImages/{id_img}.jpg' for id_img in splits_samples['val_id']]
-    df_val_paths['PATH_TO_MASK'] = [f'{path_to_raw}/gt_masks/{id_mask}.npy' for id_mask in splits_samples['val_id']]
+    df_train_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/Pascal-part/JPEGImages/{id_img}.jpg' for id_img in splits_samples['train_id']]
+    df_train_paths['PATH_TO_MASK'] = [f'{path_to_raw}/Pascal-part/gt_masks/{id_mask}.npy' for id_mask in splits_samples['train_id']]
+    df_val_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/Pascal-part/JPEGImages/{id_img}.jpg' for id_img in splits_samples['val_id']]
+    df_val_paths['PATH_TO_MASK'] = [f'{path_to_raw}/Pascal-part/gt_masks/{id_mask}.npy' for id_mask in splits_samples['val_id']]
+
+    # # upload augmented samples 
+    df_augment_paths = pd.DataFrame({'PATH_TO_IMAGE': [], 'PATH_TO_MASK': []})
+    df_augment_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/augmented_train_samples/JPEGImages/{id_img}.jpg' for id_img in splits_samples['train_id']]
+    df_augment_paths['PATH_TO_MASK'] = [f'{path_to_raw}/augmented_train_samples/gt_masks/{id_mask}.npy' for id_mask in splits_samples['train_id']]
+
+    # add augmented paths to dataset
+
+    df_train_paths = pd.concat([df_train_paths, df_augment_paths])
+
 
     # specify transforms 
     # transform = transforms.Compose([
@@ -60,7 +70,7 @@ def train():
     train_dataset = PascalPartDataset(df_train_paths, transform=transform)
     val_dataset = PascalPartDataset(df_val_paths, transform=transform)
 
-    batch_size = 16
+    batch_size = 2
     # create dataloaders
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=63)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=63)
@@ -76,11 +86,11 @@ def train():
     
     callbacks = [
         EarlyStopping(monitor='val_loss', patience=3, min_delta=1e-3),
-        # LearningRateMonitor(logging_interval='epoch'),
+        LearningRateMonitor(logging_interval='epoch'),
     ]
 
     trainer = pl.Trainer(
-        max_epochs=20,
+        max_epochs=13,
         accelerator='gpu',
         devices=1    
     )

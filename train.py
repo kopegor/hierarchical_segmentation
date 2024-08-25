@@ -59,7 +59,7 @@ def train():
     train_dataset = PascalPartDataset(df_train_paths, transform=transform)
     val_dataset = PascalPartDataset(df_val_paths, transform=transform)
 
-    batch_size = 16
+    batch_size = 24
     # create dataloaders
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=63)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=63)
@@ -74,8 +74,8 @@ def train():
     )
     
     callbacks = [
-        EarlyStopping(monitor='val_loss', patience=3, min_delta=1e-4),
-        LearningRateMonitor(logging_interval='epoch'),
+        EarlyStopping(monitor='val_loss', patience=3, min_delta=1e-3),
+        # LearningRateMonitor(logging_interval='epoch'),
     ]
 
     trainer = pl.Trainer(
@@ -96,7 +96,7 @@ def train():
     # Set tracking uri for mlflow server
     mlflow.set_tracking_uri(f'http://localhost:{port}')
     # specify mlflow logging frequency
-    log_freq = 30
+    log_freq = 10
 
     # Auto log all MLflow entities
     mlflow.pytorch.autolog(

@@ -6,6 +6,9 @@ from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
 import mlflow
 import time
+import os
+from sklearn.model_selection import train_test_split
+import torch
 
 from dataset import PascalPartDataset
 from pose_estimation_sam_module import PascalPartModel
@@ -26,36 +29,42 @@ def train():
     - Integrates MLflow for experiment tracking.
     - Starts the training process.
     """
-
+    # Define the base path to the dataset
+    path_to_raw = '/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/Pascal-part'
+    
     # Initialize empty DataFrames to store image and mask paths
     df_train_paths = pd.DataFrame({'PATH_TO_IMAGE': [], 'PATH_TO_MASK': []})
     df_val_paths = pd.DataFrame({'PATH_TO_IMAGE': [], 'PATH_TO_MASK': []})
 
-    # Define the train and validation splits
-    splits = ["train_id", "val_id"]
-    splits_samples = {}
+    # # Define the train and validation splits
+    # splits = ["train_id", "val_id"]
+    # splits_samples = {}
 
-    # Read image IDs from split files
-    for split in splits:
-        with open(f'/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/hierarchical_segmentation/data/{split}.txt') as f:
-            splits_samples[split] = f.read().splitlines()
+    # # Read image IDs from split files
+    # for split in splits:
+    #     with open(f'/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/hierarchical_segmentation/data/{split}.txt') as f:
+    #         splits_samples[split] = f.read().splitlines()
+    
+    # # Create DataFrames with full paths to images and masks for training and validation sets
+    # df_train_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/Pascal-part/JPEGImages/{id_img}.jpg' for id_img in splits_samples['train_id']]
+    # df_train_paths['PATH_TO_MASK'] = [f'{path_to_raw}/Pascal-part/gt_masks/{id_mask}.npy' for id_mask in splits_samples['train_id']]
+    # df_val_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/Pascal-part/JPEGImages/{id_img}.jpg' for id_img in splits_samples['val_id']]
+    # df_val_paths['PATH_TO_MASK'] = [f'{path_to_raw}/Pascal-part/gt_masks/{id_mask}.npy' for id_mask in splits_samples['val_id']]
 
-    # Define the base path to the dataset
-    path_to_raw = '/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/Pascal-part'
+    names_images = os.listdir('/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/Pascal-part/big_mask_samples/JPEGImages/')
+    names_images = sorted(names_images)
+
+    names_masks = os.listdir('/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/Pascal-part/big_mask_samples/gt_masks/')
+    names_masks = sorted(names_masks)
+
+    train_idx, val_idx = train_test_split(list(range(len(names_images))), train_size=0.8)
 
     # Create DataFrames with full paths to images and masks for training and validation sets
-    df_train_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/Pascal-part/JPEGImages/{id_img}.jpg' for id_img in splits_samples['train_id']]
-    df_train_paths['PATH_TO_MASK'] = [f'{path_to_raw}/Pascal-part/gt_masks/{id_mask}.npy' for id_mask in splits_samples['train_id']]
-    df_val_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/Pascal-part/JPEGImages/{id_img}.jpg' for id_img in splits_samples['val_id']]
-    df_val_paths['PATH_TO_MASK'] = [f'{path_to_raw}/Pascal-part/gt_masks/{id_mask}.npy' for id_mask in splits_samples['val_id']]
+    df_train_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/big_mask_samples/JPEGImages/{names_images[idx]}' for idx in train_idx]
+    df_train_paths['PATH_TO_MASK'] = [f'{path_to_raw}/big_mask_samples/gt_masks/{names_masks[idx]}' for idx in train_idx]
+    df_val_paths['PATH_TO_IMAGE'] =  [f'{path_to_raw}/big_mask_samples/JPEGImages/{names_images[idx]}' for idx in val_idx]
+    df_val_paths['PATH_TO_MASK'] = [f'{path_to_raw}/big_mask_samples/gt_masks/{names_masks[idx]}' for idx in val_idx]
 
-    # Upload augmented samples 
-    # df_augment_paths = pd.DataFrame({'PATH_TO_IMAGE': [], 'PATH_TO_MASK': []})
-    # df_augment_paths['PATH_TO_IMAGE'] = [f'{path_to_raw}/augmented_train_samples/JPEGImages/{id_img}.jpg' for id_img in splits_samples['train_id']]
-    # df_augment_paths['PATH_TO_MASK'] = [f'{path_to_raw}/augmented_train_samples/gt_masks/{id_mask}.npy' for id_mask in splits_samples['train_id']]
-
-    # Add augmented paths to dataset
-    # df_train_paths = pd.concat([df_train_paths, df_augment_paths])
 
     # Data augmentation and normalization transformations
     transform = A.Compose([
@@ -79,9 +88,13 @@ def train():
     pl_model = PascalPartModel(
         encoder_name='resnet34',
         encoder_weights='imagenet',
-        learning_rate=1e-3,
+        learning_rate=1e-4,
         transform=transform
     )
+
+    # Upload trained model for body fine-tuning
+    checkpoint = torch.load('/storage/AIDA_PROJECTS/egor.koptelov/MIL_test_task/hierarchical_segmentation/lightning_logs/1/b84a2a48ca984bf085103a03100dc09e/artifacts/checkpoints/latest_checkpoint.pth')
+    pl_model.load_state_dict(checkpoint['state_dict'])
     
     # Define callbacks for early stopping and learning rate monitoring
     callbacks = [
@@ -91,7 +104,7 @@ def train():
 
     # Configure the PyTorch Lightning trainer
     trainer = pl.Trainer(
-        max_epochs=18,
+        max_epochs=7,
         accelerator='gpu',
         devices=1    
     )

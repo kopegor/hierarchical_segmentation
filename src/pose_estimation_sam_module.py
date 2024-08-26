@@ -122,22 +122,26 @@ class PascalPartModel(pl.LightningModule):
         """
         Freezes/unfreezes specific layers based on the current epoch for progressive training.
         """
-        if self.current_epoch <= 2:
-            self._set_decoder_trainability(self.decoder_body, True)
-            self._set_decoder_trainability(self.decoder_up_low, False)
-            self._set_decoder_trainability(self.decoder_parts, False)
-        elif self.current_epoch <= 5:
-            self._set_decoder_trainability(self.decoder_body, False)
-            self._set_decoder_trainability(self.decoder_up_low, True)
-            self._set_decoder_trainability(self.decoder_parts, False)
-        elif self.current_epoch <= 10:
-            self._set_decoder_trainability(self.decoder_body, False)
-            self._set_decoder_trainability(self.decoder_up_low, False)
-            self._set_decoder_trainability(self.decoder_parts, True)
-        else:
-            self._set_decoder_trainability(self.decoder_body, True)
-            self._set_decoder_trainability(self.decoder_up_low, True)
-            self._set_decoder_trainability(self.decoder_parts, True)
+        # if self.current_epoch <= 2:
+        #     self._set_decoder_trainability(self.decoder_body, True)
+        #     self._set_decoder_trainability(self.decoder_up_low, False)
+        #     self._set_decoder_trainability(self.decoder_parts, False)
+        # elif self.current_epoch <= 5:
+        #     self._set_decoder_trainability(self.decoder_body, False)
+        #     self._set_decoder_trainability(self.decoder_up_low, True)
+        #     self._set_decoder_trainability(self.decoder_parts, False)
+        # elif self.current_epoch <= 10:
+        #     self._set_decoder_trainability(self.decoder_body, False)
+        #     self._set_decoder_trainability(self.decoder_up_low, False)
+        #     self._set_decoder_trainability(self.decoder_parts, True)
+        # else:
+        #     self._set_decoder_trainability(self.decoder_body, True)
+        #     self._set_decoder_trainability(self.decoder_up_low, True)
+        #     self._set_decoder_trainability(self.decoder_parts, True)
+
+        self._set_decoder_trainability(self.decoder_body, True)
+        self._set_decoder_trainability(self.decoder_up_low, False)
+        self._set_decoder_trainability(self.decoder_parts, False)
 
     def _set_decoder_trainability(self, decoder, is_trainable):
         """Helper function to set the trainability of decoder layers."""
@@ -190,14 +194,16 @@ class PascalPartModel(pl.LightningModule):
         self._log_metrics('train', loss_body, loss_up_low, loss_parts, out_body, out_up_low, out_parts, truth_body_mask, truth_up_low_mask, masks)
 
         # Return appropriate loss based on current epoch
-        if self.current_epoch <= 2:
-            return loss_body
-        elif self.current_epoch <= 5:
-            return loss_up_low
-        elif self.current_epoch <= 10:
-            return loss_parts
-        else:
-            return total_loss
+        # if self.current_epoch <= 2:
+        #     return loss_body
+        # elif self.current_epoch <= 5:
+        #     return loss_up_low
+        # elif self.current_epoch <= 10:
+        #     return loss_parts
+        # else:
+        #     return total_loss
+
+        return loss_body
 
     def validation_step(self, batch, batch_idx):
         """Defines the validation step for the model."""
@@ -218,14 +224,16 @@ class PascalPartModel(pl.LightningModule):
         self._log_metrics('val', loss_body, loss_up_low, loss_parts, out_body, out_up_low, out_parts, truth_body_mask, truth_up_low_mask, masks)
 
         # Return appropriate loss based on current epoch
-        if self.current_epoch <= 2:
-            return loss_body
-        elif self.current_epoch <= 5:
-            return loss_up_low
-        elif self.current_epoch <= 10:
-            return loss_parts
-        else:
-            return total_loss
+        # if self.current_epoch <= 2:
+        #     return loss_body
+        # elif self.current_epoch <= 5:
+        #     return loss_up_low
+        # elif self.current_epoch <= 10:
+        #     return loss_parts
+        # else:
+        #     return total_loss
+
+        return loss_body
 
     def _log_metrics(self, stage, loss_body, loss_up_low, loss_parts, out_body, out_up_low, out_parts, truth_body_mask, truth_up_low_mask, masks):
         """Helper function to log metrics during training and validation."""
@@ -251,7 +259,8 @@ class PascalPartModel(pl.LightningModule):
     def configure_optimizers(self):
         """Configures the optimizer and learning rate scheduler."""
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+        # scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.3)
         return [optimizer], [scheduler]
 
 

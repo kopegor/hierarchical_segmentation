@@ -1,3 +1,11 @@
+torch
+torchvision
+pytorch-lightning
+segmentation-models-pytorch
+torchmetrics
+albumentations
 opencv-python
 numpy
-matplotlib
+pandas
+mlflow
+ultralytics

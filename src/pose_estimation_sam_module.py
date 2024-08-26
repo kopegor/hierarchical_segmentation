@@ -139,9 +139,9 @@ class PascalPartModel(pl.LightningModule):
         #     self._set_decoder_trainability(self.decoder_up_low, True)
         #     self._set_decoder_trainability(self.decoder_parts, True)
 
-        self._set_decoder_trainability(self.decoder_body, True)
+        self._set_decoder_trainability(self.decoder_body, False)
         self._set_decoder_trainability(self.decoder_up_low, False)
-        self._set_decoder_trainability(self.decoder_parts, False)
+        self._set_decoder_trainability(self.decoder_parts, True)
 
     def _set_decoder_trainability(self, decoder, is_trainable):
         """Helper function to set the trainability of decoder layers."""
@@ -188,7 +188,7 @@ class PascalPartModel(pl.LightningModule):
         loss_up_low = self.cross_entropy_loss(out_up_low, truth_up_low_mask.squeeze(1))
         loss_parts = self.cross_entropy_loss(out_parts, masks.squeeze(1))
 
-        total_loss = 0.34 * loss_body + 0.25 * loss_up_low + 0.4 * loss_parts
+        total_loss = 0.35 * loss_body + 0.25 * loss_up_low + 0.4 * loss_parts
 
         # Log losses and metrics
         self._log_metrics('train', loss_body, loss_up_low, loss_parts, out_body, out_up_low, out_parts, truth_body_mask, truth_up_low_mask, masks)
@@ -203,7 +203,7 @@ class PascalPartModel(pl.LightningModule):
         # else:
         #     return total_loss
 
-        return loss_body
+        return loss_parts
 
     def validation_step(self, batch, batch_idx):
         """Defines the validation step for the model."""
@@ -218,7 +218,7 @@ class PascalPartModel(pl.LightningModule):
         loss_up_low = self.cross_entropy_loss(out_up_low, truth_up_low_mask.squeeze(1))
         loss_parts = self.cross_entropy_loss(out_parts, masks.squeeze(1))
 
-        total_loss = 0.4 * loss_body + 0.2 * loss_up_low + 0.4 * loss_parts
+        total_loss = 0.35 * loss_body + 0.25 * loss_up_low + 0.4 * loss_parts
 
         # Log losses and metrics
         self._log_metrics('val', loss_body, loss_up_low, loss_parts, out_body, out_up_low, out_parts, truth_body_mask, truth_up_low_mask, masks)
@@ -233,11 +233,11 @@ class PascalPartModel(pl.LightningModule):
         # else:
         #     return total_loss
 
-        return loss_body
+        return loss_parts
 
     def _log_metrics(self, stage, loss_body, loss_up_low, loss_parts, out_body, out_up_low, out_parts, truth_body_mask, truth_up_low_mask, masks):
         """Helper function to log metrics during training and validation."""
-        total_loss = 0.34 * loss_body + 0.25 * loss_up_low + 0.4 * loss_parts
+        total_loss = 0.35 * loss_body + 0.25 * loss_up_low + 0.4 * loss_parts
         jaccard_loss_body = self.jaccard_loss(out_body, truth_body_mask.squeeze(1))
         jaccard_loss_up_low = self.jaccard_loss(out_up_low, truth_up_low_mask.squeeze(1))
         jaccard_loss_parts = self.jaccard_loss(out_parts, masks.squeeze(1))
